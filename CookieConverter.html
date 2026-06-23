@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Cookie Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 700px;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #0095f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 15px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #007bb5;
+        }
+        .copy-btn {
+            background-color: #28a745;
+        }
+        .copy-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Cookie Converter </h2>
+    
+    <label for="rawInput"><strong>১. আপনার Raw কুকি এখানে পেস্ট করুন:</strong></label>
+    <textarea id="rawInput" rows="6" placeholder="উদাহরণ: ps_n=1;datr=ZpT8aWfPd..."></textarea>
+    
+    <button onclick="convertCookie()">Convert to JSON</button>
+
+    <br><br>
+    
+    <label for="jsonOutput"><strong>২. কনভার্ট করা JSON আউটপুট:</strong></label>
+    <textarea id="jsonOutput" rows="12" readonly placeholder="এখানে রেজাল্ট আসবে..."></textarea>
+    
+    <button class="copy-btn" onclick="copyOutput()">Copy JSON</button>
+</div>
+
+<script>
+    function convertCookie() {
+        const rawString = document.getElementById('rawInput').value.trim();
+        if (!rawString) {
+            alert("দয়া করে উপরের বক্সে কুকি পেস্ট করুন!");
+            return;
+        }
+
+        const pairs = rawString.split(';');
+        const jsonArray = [];
+
+        pairs.forEach(pair => {
+            let eqIndex = pair.indexOf('=');
+            if (eqIndex > -1) {
+                let key = pair.substring(0, eqIndex).trim();
+                let value = pair.substring(eqIndex + 1).trim();
+
+                if (key) {
+                    jsonArray.push({
+                        "domain": ".instagram.com",
+                        "expirationDate": 253402300799,
+                        "name": key,
+                        "path": "/",
+                        "secure": true,
+                        "session": false,
+                        "value": value
+                    });
+                }
+            }
+        });
+
+        document.getElementById('jsonOutput').value = JSON.stringify(jsonArray, null, 2);
+    }
+
+    function copyOutput() {
+        const output = document.getElementById('jsonOutput');
+        if(!output.value) {
+            alert("কপি করার মতো কিছু নেই!");
+            return;
+        }
+        output.select();
+        document.execCommand('copy');
+        alert("কপি করা হয়েছে! এবার Cookie-Editor এ Import করুন।");
+    }
+</script>
+
+</body>
+</html>
