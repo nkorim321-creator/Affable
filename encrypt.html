@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Affable — Encrypt logic for the loader</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 860px; margin: 24px auto; padding: 0 16px; line-height: 1.5; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: #888; margin-top: 0; }
+  label { font-weight: 600; display: block; margin: 14px 0 4px; }
+  textarea, input[type=password], input[type=number] { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 8px; border: 1px solid #8884; border-radius: 8px; background: #0000000a; }
+  textarea { min-height: 150px; resize: vertical; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .row > div { flex: 1 1 200px; }
+  button { margin-top: 14px; padding: 10px 18px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px; background: #0095f6; color: #fff; cursor: pointer; }
+  button.secondary { background: #6b7280; }
+  #status { margin-top: 12px; font-size: 13px; min-height: 18px; }
+  .ok { color: #16a34a; } .err { color: #dc2626; }
+  .steps { background: #0095f612; border: 1px solid #0095f644; border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+  code { background: #8882; padding: 1px 5px; border-radius: 5px; }
+</style>
+</head>
+<body>
+  <h1>🔒 Affable — Encrypt logic for the loader</h1>
+  <p class="sub">Everything runs locally in your browser. Nothing is uploaded.</p>
+
+  <div class="steps">
+    <b>How to use</b>
+    <ol style="margin:6px 0 0; padding-left:20px;">
+      <li>Paste your full <code>Test.user.js</code> below (or pick the file).</li>
+      <li>Type a password (remember it — the loader asks for it).</li>
+      <li>Click <b>Encrypt</b>, then <b>Copy output</b>.</li>
+      <li>Create a <b>GitHub Gist</b>, paste the output, save. Copy its <b>Raw</b> link.</li>
+      <li>Put that raw link in the loader's <code>PAYLOAD_URL</code>.</li>
+    </ol>
+  </div>
+
+  <label for="code">1) Your Test.user.js code</label>
+  <input type="file" id="file" accept=".js,text/javascript"><br>
+  <textarea id="code" placeholder="// ==UserScript== ... paste the whole script here ..."></textarea>
+
+  <div class="row">
+    <div>
+      <label for="pw">2) Password</label>
+      <input type="password" id="pw" placeholder="choose a password">
+    </div>
+    <div>
+      <label for="pw2">Confirm password</label>
+      <input type="password" id="pw2" placeholder="re-type it">
+    </div>
+    <div style="flex:0 0 130px;">
+      <label for="iter">PBKDF2 iters</label>
+      <input type="number" id="iter" value="200000" min="50000" step="50000">
+    </div>
+  </div>
+
+  <button id="go">🔒 Encrypt</button>
+  <div id="status"></div>
+
+  <label for="out">3) Encrypted output → paste this into your Gist</label>
+  <textarea id="out" readonly placeholder="the encrypted blob appears here"></textarea>
+  <button id="copy" class="secondary">Copy output</button>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const subtle = (window.crypto && window.crypto.subtle) || null;
+  const status = $('status');
+  const setStatus = (msg, cls) => { status.textContent = msg; status.className = cls || ''; };
+
+  $('file').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => { $('code').value = r.result; setStatus('Loaded ' + f.name + ' (' + (r.result.length/1024).toFixed(1) + ' KB)', 'ok'); };
+    r.readAsText(f);
+  });
+
+  function bytesToB64(bytes) {
+    let s = '';
+    const a = new Uint8Array(bytes);
+    for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+    return btoa(s);
+  }
+
+  async function encrypt(plaintext, password, iter) {
+    const enc = new TextEncoder();
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const keyMaterial = await subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' },
+      keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+    );
+    const ct = await subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+    // Self-describing blob — the loader reads salt/iv/iter/hash from here.
+    return JSON.stringify({
+      v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', hash: 'SHA-256', iter: iter,
+      salt: bytesToB64(salt), iv: bytesToB64(iv), ct: bytesToB64(ct)
+    });
+  }
+
+  $('go').addEventListener('click', async () => {
+    setStatus('');
+    if (!subtle) { setStatus('WebCrypto unavailable. Open this file over https:// or as a local file in Chrome/Edge.', 'err'); return; }
+    const code = $('code').value;
+    const pw = $('pw').value, pw2 = $('pw2').value;
+    const iter = Math.max(50000, parseInt($('iter').value, 10) || 200000);
+    if (!code.trim()) { setStatus('Paste your Test.user.js code first.', 'err'); return; }
+    if (code.indexOf('Affable') === -1) { setStatus('Heads up: the code does not contain "Affable" — the loader checks for that after decrypting. Make sure you pasted the right file.', 'err'); }
+    if (!pw) { setStatus('Enter a password.', 'err'); return; }
+    if (pw !== pw2) { setStatus('Passwords do not match.', 'err'); return; }
+    try {
+      setStatus('Encrypting…');
+      const blob = await encrypt(code, pw, iter);
+      $('out').value = blob;
+      setStatus('✓ Encrypted (' + (blob.length/1024).toFixed(1) + ' KB). Copy it into a Gist, then put the Raw link in PAYLOAD_URL.', 'ok');
+    } catch (e) {
+      setStatus('Encrypt failed: ' + (e && e.message || e), 'err');
+    }
+  });
+
+  $('copy').addEventListener('click', async () => {
+    const v = $('out').value;
+    if (!v) { setStatus('Nothing to copy yet — encrypt first.', 'err'); return; }
+    try { await navigator.clipboard.writeText(v); setStatus('Copied to clipboard ✓', 'ok'); }
+    catch (e) { $('out').select(); document.execCommand('copy'); setStatus('Copied (fallback) ✓', 'ok'); }
+  });
+})();
+</script>
+</body>
+</html>

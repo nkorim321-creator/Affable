@@ -1,0 +1,5 @@
+# Plaintext source — must NEVER be published.
+# The public repo only hosts the encrypted payload (Affable.json) + the loader.
+# Edit these locally, then re-encrypt into Affable.json.
+Test.user.js
+Affable.user.js
